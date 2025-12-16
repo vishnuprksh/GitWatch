@@ -8,6 +8,7 @@ A Dash application to manage local git repositories with Pull Request functional
 - **Pull Requests**: Create PRs between branches.
 - **Code Review**: View diffs of changes.
 - **Merging**: Merge PRs directly from the UI (Admin only).
+- **Close Requests**: Close requests to hide them from the active list (Admin only). Closed requests appear in a collapsible "Closed" dropdown.
 
 ## Setup
 1.  Ensure you have the required packages installed:
@@ -35,3 +36,4 @@ New users can create an account by clicking the "Sign up here" link on the login
 2.  **Create a PR**: Go to "New Pull Request", select a repo, source branch, and target branch.
 3.  **Review**: Go to the Dashboard and click on the PR to view the diff.
 4.  **Merge**: If you are an admin, click "Merge Pull Request" to merge the changes.
+5.  **Close Request**: If you are an admin, click "Close Request" to close a PR. Closed requests will be hidden from the main list and appear under the collapsible "Closed" dropdown.

@@ -69,13 +69,16 @@ def get_sidebar(user_data):
 
 def get_dashboard_layout(user_data):
     with Session(engine) as session:
-        prs = session.query(PullRequest).all()
+        all_prs = session.query(PullRequest).all()
+        open_prs = [pr for pr in all_prs if pr.status == 'open']
+        closed_prs = [pr for pr in all_prs if pr.status == 'closed']
         
+        # Build open requests list
         pr_list = []
-        if not prs:
+        if not open_prs:
             pr_list.append(dbc.ListGroupItem("No active pull requests found."))
         else:
-            for pr in prs:
+            for pr in open_prs:
                 pr_list.append(
                     dbc.ListGroupItem([
                         html.Div([
@@ -85,13 +88,47 @@ def get_dashboard_layout(user_data):
                         html.P(f"Repo: {pr.repo.name} | {pr.source_branch} -> {pr.target_branch}", className="mb-1")
                     ], href=f"/pr/{pr.id}", action=True)
                 )
+        
+        # Build closed requests list
+        closed_list = []
+        if closed_prs:
+            for pr in closed_prs:
+                closed_list.append(
+                    dbc.ListGroupItem([
+                        html.Div([
+                            html.H5(pr.title, className="mb-1"),
+                            html.Small(f"#{pr.id} opened by {pr.author.username} • {pr.status}")
+                        ], className="d-flex w-100 justify-content-between"),
+                        html.P(f"Repo: {pr.repo.name} | {pr.source_branch} -> {pr.target_branch}", className="mb-1")
+                    ], href=f"/pr/{pr.id}", action=True)
+                )
+        
+        # Build closed section (collapsed dropdown)
+        closed_section = html.Div()
+        if closed_prs:
+            closed_section = html.Div([
+                dbc.Button(
+                    ["Closed (", len(closed_prs), ")"],
+                    id="closed-toggle",
+                    color="secondary",
+                    className="mt-4 w-100 text-start",
+                    style={"textDecoration": "none"}
+                ),
+                dbc.Collapse(
+                    dbc.ListGroup(closed_list, className="mt-2"),
+                    id="closed-collapse",
+                    is_open=False,
+                    className="mb-4"
+                )
+            ])
 
     return dbc.Container([
         dbc.Row([
             dbc.Col(get_sidebar(user_data), width=2),
             dbc.Col([
                 html.H2("Dashboard", className="mt-4"),
-                dbc.ListGroup(pr_list, className="mt-4")
+                dbc.ListGroup(pr_list, className="mt-4"),
+                closed_section
             ], width=10)
         ])
     ], fluid=True)
@@ -180,8 +217,11 @@ def get_pr_detail_layout(pr_id, user_data):
                 file_diff_cards.append(file_card)
         
         merge_button = html.Div()
+        action_buttons = []
         if user_data['is_admin'] and pr.status == 'open':
-            merge_button = dbc.Button("Merge Pull Request", id={"type": "merge-btn", "index": pr.id}, color="success", className="mt-3")
+            action_buttons.append(dbc.Button("Merge Pull Request", id={"type": "merge-btn", "index": pr.id}, color="success", className="mt-3"))
+            action_buttons.append(dbc.Button("Close Request", id={"type": "close-btn", "index": pr.id}, color="danger", className="mt-3 ms-2"))
+        merge_button = html.Div(action_buttons)
 
         # Fetch comments
         comments_list = []
@@ -209,6 +249,7 @@ def get_pr_detail_layout(pr_id, user_data):
                     html.Div(file_diff_cards, className="mb-3"),
                     merge_button,
                     html.Div(id="merge-alert", className="mt-2"),
+                    html.Div(id="close-alert", className="mt-2"),
                     html.Hr(),
                     html.H4("Comments"),
                     html.Div(id="comments-container", children=comments_list, className="mb-4"),
@@ -466,6 +507,49 @@ def toggle_file_collapse(n_clicks, is_open):
 )
 def toggle_preview_file_collapse(n_clicks, is_open):
     return not is_open if is_open is not None else True
+
+# Toggle closed requests dropdown
+@app.callback(
+    Output("closed-collapse", "is_open"),
+    Input("closed-toggle", "n_clicks"),
+    State("closed-collapse", "is_open"),
+    prevent_initial_call=True
+)
+def toggle_closed_collapse(n_clicks, is_open):
+    return not is_open if is_open is not None else True
+
+# Close PR
+@app.callback(
+    Output("close-alert", "children"),
+    Input({"type": "close-btn", "index": ALL}, "n_clicks"),
+    State("session-store", "data")
+)
+def close_pr(n_clicks, session_data):
+    ctx = callback_context
+    if not ctx.triggered:
+        return ""
+    
+    try:
+        prop_id = ctx.triggered[0]['prop_id']
+        if "close-btn" not in prop_id:
+            return ""
+        
+        import json
+        id_str = prop_id.split('.')[0]
+        id_dict = json.loads(id_str)
+        pr_id = id_dict['index']
+        
+        with Session(engine) as session:
+            pr = session.query(PullRequest).filter_by(id=pr_id).first()
+            if not pr:
+                return dbc.Alert("PR not found", color="danger")
+            
+            pr.status = 'closed'
+            session.commit()
+            return dbc.Alert("Request closed successfully!", color="success")
+
+    except Exception as e:
+        return dbc.Alert(f"Error: {e}", color="danger")
 
 # Merge PR
 @app.callback(
