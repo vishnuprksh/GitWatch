@@ -8,8 +8,8 @@ services:
     expose:
       - "8050"
     environment:
-      - VIRTUAL_HOST=gitwatch.vishnupraksh.in
-      - LETSENCRYPT_HOST=gitwatch.vishnupraksh.in
+      - VIRTUAL_HOST=gitwatch.vishnuprakash.in
+      - LETSENCRYPT_HOST=gitwatch.vishnuprakash.in
       - LETSENCRYPT_EMAIL=vishnucheppanam@gmail.com
       - GITWATCH_DATA_DIR=/data/gitwatch
       - GITWATCH_REPOS_PATH=/data/gitwatch/repos
