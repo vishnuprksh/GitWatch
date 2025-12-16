@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, DateT
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime
 import os
+import bcrypt
 
 Base = declarative_base()
 
@@ -58,3 +59,18 @@ Session = sessionmaker(bind=engine)
 
 def init_db():
     Base.metadata.create_all(engine)
+
+def create_user(username, password, is_admin=False):
+    """Creates a new user with hashed password. Returns the user object or None if username exists."""
+    with Session() as session:
+        if session.query(User).filter_by(username=username).first():
+            return None
+        
+        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        new_user = User(username=username, password_hash=hashed, is_admin=is_admin)
+        session.add(new_user)
+        session.commit()
+        # Refresh to get ID
+        session.refresh(new_user)
+        return new_user
+

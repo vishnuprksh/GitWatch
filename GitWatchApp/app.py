@@ -2,7 +2,7 @@ import dash
 from dash import dcc, html, Input, Output, State, callback_context, ALL
 import dash_bootstrap_components as dbc
 from sqlalchemy.orm import Session
-from db import engine, init_db, User, Repository, PullRequest, Comment
+from db import engine, init_db, User, Repository, PullRequest, Comment, create_user
 from git_utils import list_repositories, get_repo_branches, create_branch, get_diff, merge_branch
 import pandas as pd
 import bcrypt
@@ -30,7 +30,28 @@ login_layout = dbc.Container([
             dbc.Input(id="login-username", placeholder="Username", type="text", className="mb-2"),
             dbc.Input(id="login-password", placeholder="Password", type="password", className="mb-2"),
             dbc.Button("Login", id="login-button", color="primary", className="w-100"),
-            html.Div(id="login-alert", className="mt-2")
+            html.Div(id="login-alert", className="mt-2"),
+            html.Div([
+                "Don't have an account? ",
+                dcc.Link("Sign up here", href="/signup")
+            ], className="mt-3 text-center")
+        ], width=4, className="mx-auto mt-5")
+    ])
+])
+
+signup_layout = dbc.Container([
+    dbc.Row([
+        dbc.Col([
+            html.H2("GitWatch Sign Up", className="text-center mb-4"),
+            dbc.Input(id="signup-username", placeholder="Username", type="text", className="mb-2"),
+            dbc.Input(id="signup-password", placeholder="Password", type="password", className="mb-2"),
+            dbc.Input(id="signup-confirm", placeholder="Confirm Password", type="password", className="mb-2"),
+            dbc.Button("Sign Up", id="signup-button", color="success", className="w-100"),
+            html.Div(id="signup-alert", className="mt-2"),
+            html.Div([
+                "Already have an account? ",
+                dcc.Link("Login here", href="/login")
+            ], className="mt-3 text-center")
         ], width=4, className="mx-auto mt-5")
     ])
 ])
@@ -187,15 +208,31 @@ def handle_login(n_clicks, username, password):
         if user and bcrypt.checkpw(password.encode('utf-8'), user.password_hash.encode('utf-8')):
             return {'user_id': user.id, 'username': user.username, 'is_admin': user.is_admin}, ""
         else:
-            # Auto-register for demo
-            if not user:
-                 hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                 new_user = User(username=username, password_hash=hashed, is_admin=False)
-                 session.add(new_user)
-                 session.commit()
-                 return {'user_id': new_user.id, 'username': new_user.username, 'is_admin': False}, ""
-            
             return dash.no_update, dbc.Alert("Invalid credentials", color="danger")
+
+@app.callback(
+    Output("signup-alert", "children"),
+    Input("signup-button", "n_clicks"),
+    State("signup-username", "value"),
+    State("signup-password", "value"),
+    State("signup-confirm", "value"),
+    prevent_initial_call=True
+)
+def handle_signup(n_clicks, username, password, confirm):
+    if not username or not password or not confirm:
+        return dbc.Alert("Please fill in all fields", color="warning")
+    
+    if password != confirm:
+        return dbc.Alert("Passwords do not match", color="danger")
+    
+    try:
+        user = create_user(username, password)
+        if user:
+            return dbc.Alert("Account created! Please login.", color="success")
+        else:
+            return dbc.Alert("Username already exists", color="danger")
+    except Exception as e:
+        return dbc.Alert(f"Error creating account: {e}", color="danger")
 
 # 2. Logout Callback
 @app.callback(
@@ -235,6 +272,9 @@ def manage_session(login_data, logout_data, current_session):
     Input("session-store", "data")
 )
 def router(pathname, session_data):
+    if pathname == "/signup":
+        return signup_layout
+
     # If no session, show login
     if not session_data:
         return login_layout

@@ -24,8 +24,14 @@ A Dash application to manage local git repositories with Pull Request functional
 - **Username**: `admin`
 - **Password**: `admin`
 
+## Sign Up
+New users can create an account by clicking the "Sign up here" link on the login page.
+- Enter a unique username and password.
+- Once registered, log in with your new credentials.
+- New accounts are standard users (non-admin) by default.
+
 ## Usage
-1.  **Login** with the default credentials.
+1.  **Login** with the default credentials or create a new account.
 2.  **Create a PR**: Go to "New Pull Request", select a repo, source branch, and target branch.
 3.  **Review**: Go to the Dashboard and click on the PR to view the diff.
 4.  **Merge**: If you are an admin, click "Merge Pull Request" to merge the changes.
