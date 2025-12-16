@@ -654,4 +654,5 @@ def post_comment(n_clicks, comment_text, pr_id, session_data):
         return dash.no_update, dbc.Alert(f"Error: {e}", color="danger"), dash.no_update
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 8050))
+    app.run(debug=False, host='0.0.0.0', port=port)

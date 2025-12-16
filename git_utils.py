@@ -4,20 +4,14 @@ from git import Repo
 import shutil
 
 def get_local_projects_path():
-    user_profile = os.environ.get('USERPROFILE')
-    return os.path.join(user_profile, 'local_projects')
+    """Get repository scan path from environment variable or default."""
+    return os.environ.get('GITWATCH_REPOS_PATH', '/data/gitwatch/repos')
 
 def get_project_repos_path():
-    username = os.environ.get('USERNAME')
-    search_paths = [
-        f"C:\\Users\\{username}\\OneDrive - Ship Watch\\Desktop\\Data Science\\project_repos",
-        f"C:\\Users\\{username}\\Ship Watch\\Vishnu Prakash - Data Science\\project_repos",
-        f"C:\\Users\\{username}\\Ship Watch\\sa_365backup - Ship-watch Shared\\Reference Information\\Data Science\\project_repos"
-    ]
-    
-    for path in search_paths:
-        if os.path.exists(path):
-            return path
+    """For Linux compatibility, return the main repos path."""
+    repos_path = get_local_projects_path()
+    if os.path.exists(repos_path):
+        return repos_path
     return None
 
 def list_repositories():
