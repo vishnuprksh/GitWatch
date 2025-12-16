@@ -320,6 +320,9 @@ def create_pr(n_clicks, repo_path, source, target, title, desc, session_data):
     if not n_clicks:
         return ""
     
+    if not session_data:
+        return dbc.Alert("You must be logged in to create a PR", color="danger")
+    
     if not all([repo_path, source, target, title]):
         return dbc.Alert("Please fill in all fields", color="danger")
     
@@ -410,6 +413,9 @@ def merge_pr(n_clicks, session_data):
 )
 def post_comment(n_clicks, comment_text, pr_id, session_data):
     try:
+        if not session_data:
+            return dash.no_update, dbc.Alert("You must be logged in to post a comment", color="danger"), dash.no_update
+        
         if not comment_text or not comment_text.strip():
             return dash.no_update, dbc.Alert("Comment cannot be empty", color="warning"), dash.no_update
 
