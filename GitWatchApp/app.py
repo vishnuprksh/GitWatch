@@ -44,7 +44,7 @@ def get_sidebar(user_data):
             dbc.NavLink("New Pull Request", href="/new-pr", active="exact"),
             dbc.NavLink("Logout", id="logout-btn", href="#", active="exact"),
         ], vertical=True, pills=True),
-    ], style={"padding": "2rem 1rem", "background-color": "#f8f9fa", "height": "100vh"})
+    ], style={"padding": "2rem 1rem", "backgroundColor": "#f8f9fa", "height": "100vh"})
 
 def get_dashboard_layout(user_data):
     with Session(engine) as session:
@@ -122,6 +122,21 @@ def get_pr_detail_layout(pr_id, user_data):
         if user_data['is_admin'] and pr.status == 'open':
             merge_button = dbc.Button("Merge Pull Request", id={"type": "merge-btn", "index": pr.id}, color="success", className="mt-3")
 
+        # Fetch comments
+        comments_list = []
+        for comment in pr.comments:
+            comments_list.append(
+                dbc.Card([
+                    dbc.CardBody([
+                        html.H6(f"{comment.author.username} - {comment.created_at.strftime('%Y-%m-%d %H:%M')}", className="card-subtitle mb-2 text-muted"),
+                        html.P(comment.content, className="card-text")
+                    ])
+                ], className="mb-2")
+            )
+        
+        if not comments_list:
+            comments_list = [html.P("No comments yet.", className="text-muted")]
+
         return dbc.Container([
             dbc.Row([
                 dbc.Col(get_sidebar(user_data), width=2),
@@ -130,9 +145,16 @@ def get_pr_detail_layout(pr_id, user_data):
                     html.P(pr.description),
                     html.Hr(),
                     html.H4("Changes"),
-                    html.Pre(diff_text, style={"background-color": "#f0f0f0", "padding": "10px", "max-height": "500px", "overflow-y": "scroll"}),
+                    html.Pre(diff_text, style={"backgroundColor": "#f0f0f0", "padding": "10px", "maxHeight": "500px", "overflowY": "scroll"}),
                     merge_button,
-                    html.Div(id="merge-alert", className="mt-2")
+                    html.Div(id="merge-alert", className="mt-2"),
+                    html.Hr(),
+                    html.H4("Comments"),
+                    html.Div(id="comments-container", children=comments_list, className="mb-4"),
+                    dcc.Store(id="current-pr-id", data=pr.id),
+                    dbc.Textarea(id="comment-textarea", placeholder="Leave a comment...", className="mb-2"),
+                    dbc.Button("Post Comment", id="post-comment-btn", color="primary"),
+                    html.Div(id="comment-alert", className="mt-2")
                 ], width=10)
             ])
         ], fluid=True)
@@ -334,6 +356,53 @@ def merge_pr(n_clicks, session_data):
 
     except Exception as e:
         return dbc.Alert(f"Error: {e}", color="danger")
+
+# Post Comment
+@app.callback(
+    Output("comments-container", "children"),
+    Output("comment-alert", "children"),
+    Output("comment-textarea", "value"),
+    Input("post-comment-btn", "n_clicks"),
+    State("comment-textarea", "value"),
+    State("current-pr-id", "data"),
+    State("session-store", "data"),
+    prevent_initial_call=True
+)
+def post_comment(n_clicks, comment_text, pr_id, session_data):
+    try:
+        if not comment_text or not comment_text.strip():
+            return dash.no_update, dbc.Alert("Comment cannot be empty", color="warning"), dash.no_update
+
+        with Session(engine) as session:
+            pr = session.query(PullRequest).filter_by(id=pr_id).first()
+            if not pr:
+                return dash.no_update, dbc.Alert("PR not found", color="danger"), dash.no_update
+            
+            comment = Comment(
+                pr_id=pr.id,
+                user_id=session_data['user_id'],
+                content=comment_text
+            )
+            session.add(comment)
+            session.commit()
+            
+            # Refresh comments list
+            updated_pr = session.query(PullRequest).filter_by(id=pr_id).first()
+            comments_list = []
+            for c in updated_pr.comments:
+                comments_list.append(
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.H6(f"{c.author.username} - {c.created_at.strftime('%Y-%m-%d %H:%M')}", className="card-subtitle mb-2 text-muted"),
+                            html.P(c.content, className="card-text")
+                        ])
+                    ], className="mb-2")
+                )
+            
+            return comments_list, dbc.Alert("Comment posted!", color="success"), ""
+
+    except Exception as e:
+        return dash.no_update, dbc.Alert(f"Error: {e}", color="danger"), dash.no_update
 
 if __name__ == "__main__":
     app.run(debug=True)
