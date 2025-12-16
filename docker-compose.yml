@@ -1,64 +1,23 @@
-version: '3.8'
+version: "3.8"
 
 services:
   gitwatch:
-    build: .
     image: gitwatch:latest
     container_name: gitwatch
-    ports:
+    restart: unless-stopped
+    expose:
       - "8050"
-    volumes:
-      - /gitwatch:/data/gitwatch
     environment:
-      - GITWATCH_DATA_DIR=/data/gitwatch
-      - GITWATCH_REPOS_PATH=/data/gitwatch/repos
       - VIRTUAL_HOST=gitwatch.vishnupraksh.in
       - LETSENCRYPT_HOST=gitwatch.vishnupraksh.in
-      - LETSENCRYPT_EMAIL=your-email@example.com
-    networks:
-      - nginx-proxy-network
-    restart: unless-stopped
-    depends_on:
-      - nginx-proxy
-
-  nginx-proxy:
-    image: jwilder/nginx-proxy:latest
-    container_name: nginx-proxy
-    ports:
-      - "80:80"
-      - "443:443"
+      - LETSENCRYPT_EMAIL=vishnucheppanam@gmail.com
+      - GITWATCH_DATA_DIR=/data/gitwatch
+      - GITWATCH_REPOS_PATH=/data/gitwatch/repos
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - nginx-certs:/etc/nginx/certs
-      - nginx-vhost:/etc/nginx/vhost.d
-      - nginx-html:/usr/share/nginx/html
+      - /gitwatch:/data/gitwatch
     networks:
-      - nginx-proxy-network
-    restart: unless-stopped
-
-  acme-companion:
-    image: nginxproxy/acme-companion
-    container_name: acme-companion
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - nginx-certs:/etc/nginx/certs
-      - nginx-vhost:/etc/nginx/vhost.d
-      - nginx-html:/usr/share/nginx/html
-      - acme-data:/etc/acme.sh
-    environment:
-      - NGINX_PROXY_CONTAINER=nginx-proxy
-    networks:
-      - nginx-proxy-network
-    restart: unless-stopped
-    depends_on:
       - nginx-proxy
-
-volumes:
-  nginx-certs:
-  nginx-vhost:
-  nginx-html:
-  acme-data:
 
 networks:
-  nginx-proxy-network:
-    driver: bridge
+  nginx-proxy:
+    external: true
