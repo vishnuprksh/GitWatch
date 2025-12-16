@@ -58,11 +58,15 @@ def create_branch(repo_path, branch_name, source_branch='main'):
         return False, str(e)
 
 def get_diff(repo_path, source_branch, target_branch='main'):
+    """Returns structured per-file diff data as a list of dicts.
+    Each dict contains: path, patch, change_type, additions, deletions.
+    Returns empty list if no changes or error.
+    """
     try:
         repo = Repo(repo_path)
         
         if source_branch not in repo.heads or target_branch not in repo.heads:
-            return "One or both branches do not exist."
+            return []
 
         # Get commit objects
         source_commit = repo.heads[source_branch].commit
@@ -71,14 +75,25 @@ def get_diff(repo_path, source_branch, target_branch='main'):
         # Get diff
         diff_index = target_commit.diff(source_commit, create_patch=True)
         
-        diff_text = ""
+        file_diffs = []
         for diff in diff_index:
-            diff_text += f"File: {diff.a_path}\n"
-            diff_text += str(diff.diff.decode('utf-8')) + "\n\n"
+            patch_text = diff.diff.decode('utf-8') if diff.diff else ""
+            # Count additions and deletions from patch
+            additions = patch_text.count('\n+') if patch_text else 0
+            deletions = patch_text.count('\n-') if patch_text else 0
             
-        return diff_text if diff_text else "No changes found."
+            file_diffs.append({
+                'path': diff.a_path or diff.b_path,
+                'patch': patch_text,
+                'change_type': diff.change_type,
+                'additions': additions,
+                'deletions': deletions
+            })
+            
+        return file_diffs
     except Exception as e:
-        return f"Error generating diff: {e}"
+        print(f"Error generating diff: {e}")
+        return []
 
 def merge_branch(repo_path, source_branch, target_branch='main'):
     try:

@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, State, callback_context, ALL
+from dash import dcc, html, Input, Output, State, callback_context, ALL, MATCH
 import dash_bootstrap_components as dbc
 from sqlalchemy.orm import Session
 from db import engine, init_db, User, Repository, PullRequest, Comment, create_user
@@ -119,6 +119,8 @@ def get_new_pr_layout(user_data):
                     ])
                 ]),
                 
+                html.Div(id="diff-preview-container", className="mb-4"),
+                
                 dbc.Label("Title"),
                 dbc.Input(id="new-pr-title", type="text", className="mb-3"),
                 
@@ -137,7 +139,45 @@ def get_pr_detail_layout(pr_id, user_data):
         if not pr:
             return html.Div("PR not found")
         
-        diff_text = get_diff(pr.repo.path, pr.source_branch, pr.target_branch)
+        # Get structured per-file diffs
+        file_diffs = get_diff(pr.repo.path, pr.source_branch, pr.target_branch)
+        
+        # Build file diff cards
+        file_diff_cards = []
+        if not file_diffs:
+            file_diff_cards.append(html.P("No changes found.", className="text-muted"))
+        else:
+            for file_diff in file_diffs:
+                # Map change type to badge color and label
+                change_map = {'A': ('Added', 'success'), 'D': ('Deleted', 'danger'), 'M': ('Modified', 'info'), 'R': ('Renamed', 'warning')}
+                change_label, badge_color = change_map.get(file_diff['change_type'], ('Unknown', 'secondary'))
+                
+                file_idx = hash(file_diff['path']) % (10**8)
+                file_card = dbc.Card([
+                    dbc.CardHeader(
+                        html.Button(
+                            html.Div([
+                                html.Span(file_diff['path'], className="font-weight-bold"),
+                                html.Span(" "),
+                                dbc.Badge(change_label, color=badge_color, className="ms-2"),
+                                html.Span(" "),
+                                dbc.Badge(f"+{file_diff['additions']}", color="success", className="ms-1") if file_diff['additions'] > 0 else html.Span(),
+                                dbc.Badge(f"-{file_diff['deletions']}", color="danger", className="ms-1") if file_diff['deletions'] > 0 else html.Span()
+                            ], style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "100%"}),
+                            id={"type": "toggle-file", "index": file_idx},
+                            style={"background": "none", "border": "none", "width": "100%", "textAlign": "left", "cursor": "pointer", "padding": "0"}
+                        )
+                    ),
+                    dbc.Collapse(
+                        dbc.CardBody([
+                            html.Pre(file_diff['patch'], style={"backgroundColor": "#f5f5f5", "padding": "10px", "fontSize": "12px", "overflowX": "auto"})
+                        ]),
+                        id={"type": "file-diff-collapse", "index": file_idx},
+                        is_open=False,
+                        className="file-diff-body"
+                    )
+                ], className="mb-2")
+                file_diff_cards.append(file_card)
         
         merge_button = html.Div()
         if user_data['is_admin'] and pr.status == 'open':
@@ -165,8 +205,8 @@ def get_pr_detail_layout(pr_id, user_data):
                     html.H2(f"#{pr.id} {pr.title}", className="mt-4"),
                     html.P(pr.description),
                     html.Hr(),
-                    html.H4("Changes"),
-                    html.Pre(diff_text, style={"backgroundColor": "#f0f0f0", "padding": "10px", "maxHeight": "500px", "overflowY": "scroll"}),
+                    html.H4(f"Changes ({len(file_diffs)} file{'s' if len(file_diffs) != 1 else ''})"),
+                    html.Div(file_diff_cards, className="mb-3"),
                     merge_button,
                     html.Div(id="merge-alert", className="mt-2"),
                     html.Hr(),
@@ -305,6 +345,65 @@ def update_branches(repo_path):
     options = [{'label': b, 'value': b} for b in branches]
     return options, options
 
+# Show diff preview when source/target branches are selected
+@app.callback(
+    Output("diff-preview-container", "children"),
+    Input("new-pr-source", "value"),
+    Input("new-pr-target", "value"),
+    State("new-pr-repo", "value"),
+    prevent_initial_call=True
+)
+def show_diff_preview(source_branch, target_branch, repo_path):
+    if not repo_path or not source_branch or not target_branch:
+        return html.Div()
+    
+    # Get structured per-file diffs
+    file_diffs = get_diff(repo_path, source_branch, target_branch)
+    
+    if not file_diffs:
+        return html.Div([
+            html.H5("No changes to show", className="text-muted mt-3")
+        ])
+    
+    # Build file diff cards for preview
+    file_diff_cards = []
+    for idx, file_diff in enumerate(file_diffs):
+        # Map change type to badge color and label
+        change_map = {'A': ('Added', 'success'), 'D': ('Deleted', 'danger'), 'M': ('Modified', 'info'), 'R': ('Renamed', 'warning')}
+        change_label, badge_color = change_map.get(file_diff['change_type'], ('Unknown', 'secondary'))
+        
+        file_idx = hash(f"preview-{file_diff['path']}") % (10**8)
+        file_card = dbc.Card([
+            dbc.CardHeader(
+                html.Button(
+                    html.Div([
+                        html.Span(file_diff['path'], className="font-weight-bold"),
+                        html.Span(" "),
+                        dbc.Badge(change_label, color=badge_color, className="ms-2"),
+                        html.Span(" "),
+                        dbc.Badge(f"+{file_diff['additions']}", color="success", className="ms-1") if file_diff['additions'] > 0 else html.Span(),
+                        dbc.Badge(f"-{file_diff['deletions']}", color="danger", className="ms-1") if file_diff['deletions'] > 0 else html.Span()
+                    ], style={"display": "flex", "alignItems": "center", "gap": "8px", "width": "100%"}),
+                    id={"type": "toggle-preview-file", "index": file_idx},
+                    style={"background": "none", "border": "none", "width": "100%", "textAlign": "left", "cursor": "pointer", "padding": "0"}
+                )
+            ),
+            dbc.Collapse(
+                dbc.CardBody([
+                    html.Pre(file_diff['patch'], style={"backgroundColor": "#f5f5f5", "padding": "10px", "fontSize": "12px", "overflowX": "auto", "maxHeight": "300px", "overflowY": "auto"})
+                ]),
+                id={"type": "preview-file-diff-collapse", "index": file_idx},
+                is_open=False,
+                className="file-diff-body"
+            )
+        ], className="mb-2")
+        file_diff_cards.append(file_card)
+    
+    return html.Div([
+        html.H5(f"Changes ({len(file_diffs)} file{'s' if len(file_diffs) != 1 else ''})", className="mt-3"),
+        html.Div(file_diff_cards)
+    ])
+
 # Create PR
 @app.callback(
     Output("create-pr-alert", "children"),
@@ -347,6 +446,26 @@ def create_pr(n_clicks, repo_path, source, target, title, desc, session_data):
         session.commit()
         
     return dbc.Alert("Pull Request Created Successfully!", color="success")
+
+# Toggle file diff collapse when header is clicked (pattern-matching)
+@app.callback(
+    Output({"type": "file-diff-collapse", "index": MATCH}, "is_open"),
+    Input({"type": "toggle-file", "index": MATCH}, "n_clicks"),
+    State({"type": "file-diff-collapse", "index": MATCH}, "is_open"),
+    prevent_initial_call=True
+)
+def toggle_file_collapse(n_clicks, is_open):
+    return not is_open if is_open is not None else True
+
+# Toggle preview file diff collapse when header is clicked (pattern-matching)
+@app.callback(
+    Output({"type": "preview-file-diff-collapse", "index": MATCH}, "is_open"),
+    Input({"type": "toggle-preview-file", "index": MATCH}, "n_clicks"),
+    State({"type": "preview-file-diff-collapse", "index": MATCH}, "is_open"),
+    prevent_initial_call=True
+)
+def toggle_preview_file_collapse(n_clicks, is_open):
+    return not is_open if is_open is not None else True
 
 # Merge PR
 @app.callback(
